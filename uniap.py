@@ -17,7 +17,7 @@ def get_form(soup:BeautifulSoup, name:str):
     *form.find_all("button"),
   ]
   result = {
-    "method": form.attrs.get("method"),
+    # "method": form.attrs.get("method"),
     "path": form.attrs.get("action"),
     "headers": {
       "content-type" : form.attrs.get("enctype")
@@ -27,7 +27,7 @@ def get_form(soup:BeautifulSoup, name:str):
       for i in values
     },
   }
-  return result
+  return result, form
 
 session = requests.session()
 
@@ -35,7 +35,7 @@ session = requests.session()
 response = session.post(HOST + '/uprx/up/pk/pky501/Pky50101.xhtml')
 soup = BeautifulSoup(response.content, "html.parser")
 
-data = get_form(soup, "pmPage:loginForm")
+data, _ = get_form(soup, "pmPage:loginForm")
 data["data"]["pmPage:loginForm:userId_input"] = USER_ID
 data["data"]["pmPage:loginForm:password"] = USER_PASWRD
 
@@ -47,7 +47,10 @@ response = session.post(
 )
 soup = BeautifulSoup(response.content, "html.parser")
 
-data = get_form(soup, "pmPage:menuForm")
+data, _ = get_form(soup, "pmPage:menuForm")
+if data is None:
+  raise Exception("ログイン失敗")
+
 data["data"] = dict(filter(lambda item: "pmPage:menuForm:" not in item[0], data["data"].items()))
 data["data"]["pmPage:menuForm:j_idt37:16:menuBtn1"] = ""
 
@@ -58,8 +61,10 @@ response = session.post(
   data = urlencode(data["data"]),
 )
 soup = BeautifulSoup(response.content, "html.parser")
+data, form = get_form(soup, "pmPage:funcForm")
 
-data = get_form(soup, "pmPage:funcForm")
+if form.find(None, text="出席"):
+  raise Exception("出席済み")
 
 del data["data"]["pmPage:funcForm:j_idt139"]
 data["data"] = { 
@@ -75,6 +80,9 @@ code_input_form_name = [
 ]
 code_input_form_name.sort()
 
+if len(code_input_form_name) == 0:
+  raise Exception("授業なし")
+
 for i in range(4):
   data["data"][code_input_form_name[i]] = CODE[i]
 
@@ -85,4 +93,6 @@ response = session.post(
   data = urlencode(data["data"]),
 )
 soup = BeautifulSoup(response.content, "html.parser")
-# print(soup)
+data, form = get_form(soup, "pmPage:funcForm")
+if not form.find(None, text="出席"):
+  raise Exception("出席失敗")
