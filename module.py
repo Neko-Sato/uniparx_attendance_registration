@@ -3,25 +3,31 @@ import re
 from urllib.parse import urlencode
 from bs4 import BeautifulSoup, Tag
 
+from oauth2client.service_account import ServiceAccountCredentials
+import gspread
+
 class UnipaMobail:
   HOST = "https://unipa.i-u.ac.jp"
-  def __init__(self, id, paswrd):
+  def __init__(self, user_id, user_paswrd):
     self.session = requests.session()
-    self.user_id = None
-    self.nowsoup = None
-    self.update_soup(path='/uprx/up/pk/pky501/Pky50101.xhtml')
-    self.__login(id, paswrd)
-  def __repr__(self):
-    return f"<UnipaMobail {self.user_id}>"
-  def update_soup(self, path, data=None, **kwargs):
+    self.user_id = user_id
+    self.user_paswrd = user_paswrd
+    self.menu_soup = None
+    self.__login()
+  def get_form(self, soup:BeautifulSoup, name:str):
+    return soup.find('form', attrs={"name": name})
+  def get_soup(self, path, data=None, certification=True,**kwargs):
     response = self.session.post(
       url = self.HOST + path,
       data = urlencode(data) if data is not None else None,
       **kwargs, 
       )
-    self.nowsoup = BeautifulSoup(response.content, "html.parser")
-  def get_form(self, name:str):
-    return self.nowsoup.find('form', attrs={"name": name})
+    soup = BeautifulSoup(response.content, "html.parser")
+    self.menu_soup = self.get_form(soup, "pmPage:menuForm")
+    if self.menu_soup is None and certification:
+      self.__login()
+      soup = self.get_soup(path, data, **kwargs)
+    return soup
   def formatting(self, form:Tag):
     values = form.find_all(["input", "button"])
     result = {
@@ -35,34 +41,29 @@ class UnipaMobail:
       }
     }
     return result
-  def __login(self, id, paswrd):
-    if self.user_id is not None:
-      print(self, "ログイン済み")
-      return
-    form = self.get_form("pmPage:loginForm")
+  def __login(self):
+    soup = self.get_soup(path='/uprx/up/pk/pky501/Pky50101.xhtml', certification=False)
+    form = self.get_form(soup, "pmPage:loginForm")
     values = self.formatting(form)
-    values["data"]["pmPage:loginForm:userId_input"] = id
-    values["data"]["pmPage:loginForm:password"] = paswrd
-    self.update_soup(**values)
-    values = self.get_form("pmPage:menuForm")
-    if values is None:
-      print(self, "ログイン失敗")
-    else:
-      self.user_id = id
-      print(self, "ログイン成功")
-  def attend(self, code):
-    if not re.match(r'^\d{4}$', code):
-      print(self, "出席コードエラー")
-      return
-    form = self.get_form("pmPage:menuForm")
-    values = self.formatting(form)
+    values["data"]["pmPage:loginForm:userId_input"] = self.user_id
+    values["data"]["pmPage:loginForm:password"] = self.user_paswrd
+    self.get_soup(**values)
+    if self.menu_soup is None:
+      raise Exception("ログインエラー")
+    print(self, "ログイン")
+  def click_menu(self, num):
+    values = self.formatting(self.menu_soup)
     values["data"] = {k:v for k, v in values["data"].items() if "pmPage:menuForm:" not in k}
-    values["data"]["pmPage:menuForm:j_idt37:16:menuBtn1"] = ""
-    self.update_soup(**values)
-    form = self.get_form("pmPage:funcForm")
+    values["data"][f"pmPage:menuForm:j_idt37:{num}:menuBtn1"] = ""
+    soup = self.get_soup(**values)
+    return soup
+  def get_attend_form(self):
+    soup = self.click_menu(16)
+    form = self.get_form(soup, "pmPage:funcForm")
     if form.find(None, text="出席"):
-      print(self, "出席済み")
-      return
+      raise Exception("出席済み")
+    elif form.find(None, text="現在、履修している授業はありません。"):
+      raise Exception("授業なし")
     values = self.formatting(form)
     del values["data"]["pmPage:funcForm:j_idt139"]
     values["data"] = { 
@@ -75,8 +76,12 @@ class UnipaMobail:
     ]
     code_input_form_name.sort()
     if len(code_input_form_name) == 0:
-      print(self, "授業なし")
-      return
+      raise Exception("授業なし")
+    return values, code_input_form_name
+  def attend(self, attend_form, code):
+    if not re.match(r'^\d{4}$', code):
+      raise Exception("出席コードエラー")
+    values, code_input_form_name = attend_form
     for i in range(4):
       values["data"][code_input_form_name[i]] = code[i]
     self.update_soup(**values)
@@ -85,3 +90,12 @@ class UnipaMobail:
       print(self, "出席失敗")
     else:
       print(self, "出席成功")
+  def __repr__(self):
+    return f"<UnipaMobail {self.user_id}>"
+
+user_id = input("ID>>")
+user_pass = input("pass>>")
+user = UnipaMobail(user_id, user_pass)
+CODE = input("CODE>>")
+attend_form = user.get_attend_form()
+user.attend(attend_form, CODE)
