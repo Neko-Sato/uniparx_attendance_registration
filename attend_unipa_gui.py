@@ -6,7 +6,7 @@ import os
 class UnipaMobailController:
   def __init__(self):
     self.user = None
-    self.config_path = os.path.join(os.environ['HOME'], "attend_unipa.config")
+    self.config_path = os.path.join(os.path.expanduser("~"), "attend_unipa.config")
     self.config = configparser.ConfigParser()
     self.config.read(self.config_path)
     self.config.setdefault('Certification', {"id": "", "paswrd": ""})
