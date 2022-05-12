@@ -3,9 +3,6 @@ import re
 from urllib.parse import urlencode
 from bs4 import BeautifulSoup, Tag
 
-from oauth2client.service_account import ServiceAccountCredentials
-import gspread
-
 class UnipaMobail:
   HOST = "https://unipa.i-u.ac.jp"
   def __init__(self, user_id, user_paswrd):
@@ -13,7 +10,7 @@ class UnipaMobail:
     self.user_id = user_id
     self.user_paswrd = user_paswrd
     self.menu_soup = None
-    self.__login()
+    self.login()
   def get_form(self, soup:BeautifulSoup, name:str):
     return soup.find('form', attrs={"name": name})
   def get_soup(self, path, data=None, certification=True,**kwargs):
@@ -25,8 +22,7 @@ class UnipaMobail:
     soup = BeautifulSoup(response.content, "html.parser")
     self.menu_soup = self.get_form(soup, "pmPage:menuForm")
     if self.menu_soup is None and certification:
-      self.__login()
-      soup = self.get_soup(path, data, **kwargs)
+      raise Exception("タイムアウト")
     return soup
   def formatting(self, form:Tag):
     values = form.find_all(["input", "button"])
@@ -41,14 +37,15 @@ class UnipaMobail:
       }
     }
     return result
-  def __login(self):
+  def login(self):
     soup = self.get_soup(path='/uprx/up/pk/pky501/Pky50101.xhtml', certification=False)
     form = self.get_form(soup, "pmPage:loginForm")
     values = self.formatting(form)
     values["data"]["pmPage:loginForm:userId_input"] = self.user_id
     values["data"]["pmPage:loginForm:password"] = self.user_paswrd
-    self.get_soup(**values)
-    if self.menu_soup is None:
+    try:
+      self.get_soup(**values)
+    except Exception:
       raise Exception("ログインエラー")
     print(self, "ログイン")
   def click_menu(self, num):
@@ -84,18 +81,19 @@ class UnipaMobail:
     values, code_input_form_name = attend_form
     for i in range(4):
       values["data"][code_input_form_name[i]] = code[i]
-    self.update_soup(**values)
-    form = self.get_form("pmPage:funcForm")
+    soup = self.get_soup(**values)
+    form = self.get_form(soup, "pmPage:funcForm")
     if not form.find(None, text="出席"):
-      print(self, "出席失敗")
+      raise Exception("出席失敗")
     else:
       print(self, "出席成功")
   def __repr__(self):
     return f"<UnipaMobail {self.user_id}>"
 
-user_id = input("ID>>")
-user_pass = input("pass>>")
-user = UnipaMobail(user_id, user_pass)
-CODE = input("CODE>>")
-attend_form = user.get_attend_form()
-user.attend(attend_form, CODE)
+if __name__ == "__main__":
+  user_id = input("ID>>")
+  user_paswrd = input("paswrd>>")
+  user = UnipaMobail(user_id, user_paswrd)
+  attend_form = user.get_attend_form()
+  code = input("code>>")
+  user.attend(attend_form, code)
