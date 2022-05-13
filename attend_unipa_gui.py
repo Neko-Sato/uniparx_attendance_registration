@@ -10,11 +10,16 @@ class UnipaMobailController:
     self.config = configparser.ConfigParser()
     self.config.read(self.config_path)
     self.config.setdefault('Certification', {"id": "", "paswrd": ""})
+    self.relogin()
+  def relogin(self):
     if not self.config.get('Certification', "id") == "":
-      self.login(
-        self.config.get('Certification', "id"), 
-        self.config.get('Certification', "paswrd")
-      )
+      try:
+        self.login(
+          self.config.get('Certification', "id"), 
+          self.config.get('Certification', "paswrd")
+        )
+      except Exception:
+        self.logout()
   def login(self, user_id, user_paswrd):
     self.user = UnipaMobail(user_id, user_paswrd)
     self.config.set('Certification', "id", user_id)
@@ -68,7 +73,10 @@ class AttendUnipa(App):
     except Exception as e:
       page = ResultPage(self, e.args[0])
       if e.args[0] == "タイムアウト":
-        self.login()
+        self.controller.relogin()
+        if self.controller.user is None:
+          page = LoginPage(self)
+          
     self.display(page)
 
 class UnipaPage(tk.Frame):
