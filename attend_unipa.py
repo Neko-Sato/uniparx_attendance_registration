@@ -57,8 +57,11 @@ class UnipaMobail:
   def get_attend_form(self):
     soup = self.click_menu(16)
     form = self.get_form(soup, "pmPage:funcForm")
-    if form.find(None, text="出席"):
-      raise Exception("出席済み")
+    if form.find(None, text="出席確認終了"):
+      if form.find(None, text="出席"):
+        raise Exception("出席済み")
+      else:
+        raise Exception("欠席")
     elif form.find(None, text="現在、履修している授業はありません。"):
       raise Exception("授業なし")
     values = self.formatting(form)
@@ -72,8 +75,6 @@ class UnipaMobail:
       if re.match(r'^pmPage:funcForm:j_idt90:\d+:j_idt\d+_input$', i)
     ]
     code_input_form_name.sort()
-    if len(code_input_form_name) == 0:
-      raise Exception("授業なし")
     return values, code_input_form_name
   def attend(self, attend_form, code):
     if not re.match(r'^\d{4}$', code):

@@ -45,15 +45,19 @@ class AttendUnipa(App):
     self.title("うにぱしゅっせき")
     self.controller = UnipaMobailController()
     self.resizable(width=False, height=False)
+    self.logout_button = tk.Button(self, text="ログアウト", command=self.logout)
     if self.controller.user is None:
       self.display(LoginPage(self))
     else:
+      self.logout_button.pack()
       self.display(Home(self))
   def login(self, user_id, user_paswrd):
     self.controller.login(user_id, user_paswrd)
+    self.logout_button.pack()
     self.display(Home(self))
   def logout(self):
     self.controller.logout()
+    self.logout_button.pack_forget()
     self.display(LoginPage(self))
   def get_attend_form(self):
     return self.controller.user.get_attend_form()
@@ -63,12 +67,14 @@ class AttendUnipa(App):
       page = ResultPage(self, "出席成功")
     except Exception as e:
       page = ResultPage(self, e.args[0])
+      if e.args[0] == "タイムアウト":
+        self.login()
     self.display(page)
 
 class UnipaPage(tk.Frame):
   def __init__(self, unipa:AttendUnipa):
     super().__init__(unipa)
-    self.unipa = unipa
+    self.unipa:AttendUnipa = unipa
 
 class LoginPage(UnipaPage):
   def __init__(self, unipa):
@@ -143,15 +149,25 @@ class ResultPage(UnipaPage):
     self.unipa = unipa
     
     self.result_label = tk.Label(self, text=massage)
-    self.result_label.grid(column=0, row=0, padx=5, pady=5)
+    self.result_label.grid(column=0, row=0, columnspan=2, padx=5, pady=5)
+
+    self.retry_button = tk.Button(self, text="リトライ", command=self.retry)
+    self.retry_button.bind("<Key-Return>", lambda _: self.retry())
+    self.retry_button.grid(column=0, row=1, padx=5, pady=5)
 
     self.close_button = tk.Button(self, text="閉じる", command=self.close)
-    self.close_button.focus_set()
     self.close_button.bind("<Key-Return>", lambda _: self.close())
-    self.close_button.grid(column=0, row=1, padx=5, pady=5)
+    self.close_button.grid(column=1, row=1, padx=5, pady=5)
+
+    if massage in ["出席コードエラー", "出席失敗", "タイムアウト"]:
+      self.retry_button.focus_set()
+    else:
+      self.close_button.focus_set()
+
   def close(self):
     self.unipa.destroy()
-
+  def retry(self):
+    self.unipa.display(Home(self.unipa))
 
 if __name__ == "__main__":
   AttendUnipa().mainloop()
