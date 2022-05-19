@@ -1,16 +1,22 @@
-from attend_unipa import *
+from typing import Optional
 import tkinter as tk
+from page_app import App, Screen, Page
+from page_app.page import LabelPage
+from unipa_actions.attend_action import AttendError
+from unipa_mobail import UnipaMobail, LoginError, MaintenanceError
+from unipa_actions import AttendAction
 import configparser
 import os
 
-class UnipaMobailController:
-  def __init__(self):
+class UnipaAppController:
+  user:Optional[UnipaMobail]
+  config_path:str
+  def __init__(self) -> None:
     self.user = None
     self.config_path = os.path.join(os.path.expanduser("~"), "attend_unipa.config")
     self.config = configparser.ConfigParser()
     self.config.read(self.config_path)
     self.config.setdefault('Certification', {"id": "", "paswrd": ""})
-    self.relogin()
   def relogin(self):
     if not self.config.get('Certification', "id") == "":
       try:
@@ -18,7 +24,7 @@ class UnipaMobailController:
           self.config.get('Certification', "id"), 
           self.config.get('Certification', "paswrd")
         )
-      except Exception:
+      except LoginError:
         self.logout()
   def login(self, user_id, user_paswrd):
     self.user = UnipaMobail(user_id, user_paswrd)
@@ -34,59 +40,45 @@ class UnipaMobailController:
       with open(self.config_path, 'w') as config_file:
         self.config.write(config_file)
 
-class App(tk.Tk):
-  def __init__(self):
+class AttendApp(App):
+  def __init__(self) -> None:
     super().__init__()
-    self.current_page = None
-  def display(self, page:tk.Frame):
-    if self.current_page is not None:
-      self.current_page.destroy()
-    page.pack()
-    self.current_page = page
-
-class AttendUnipa(App):
-  def __init__(self):
-    super().__init__()
+    self.controller = UnipaAppController()
     self.title("うにぱしゅっせき")
-    self.controller = UnipaMobailController()
     self.resizable(width=False, height=False)
     self.logout_button = tk.Button(self, text="ログアウト", command=self.logout)
-    if self.controller.user is None:
-      self.display(LoginPage(self))
+    try:
+      self.controller.relogin()
+    except MaintenanceError:
+      self.screen.display(lambda x: ResultPage(x, "メンテナンス中です"))
     else:
-      self.logout_button.pack()
-      self.display(Home(self))
+      if self.controller.user is not None:
+        self.logout_button.pack()
+        self.go_attend_page()
+      else:
+        self.screen.display(lambda x: LoginPage(x))
+  @classmethod
+  def of(cls, widget: tk.Widget) -> Optional["AttendApp"]:
+    return super().of(widget)
   def login(self, user_id, user_paswrd):
     self.controller.login(user_id, user_paswrd)
     self.logout_button.pack()
-    self.display(Home(self))
+    self.go_attend_page()
   def logout(self):
     self.controller.logout()
-    self.logout_button.pack_forget()
-    self.display(LoginPage(self))
-  def get_attend_form(self):
-    return self.controller.user.get_attend_form()
-  def attend(self, attend_form, code):
+    self.logout_button.forget()
+    self.screen.display(lambda x: LoginPage(x))
+  def go_attend_page(self):
+    action = AttendAction(self.controller.user)
     try:
-      self.controller.user.attend(attend_form, code)
-      page = ResultPage(self, "出席成功")
-    except Exception as e:
-      page = ResultPage(self, e.args[0])
-      if e.args[0] == "タイムアウト":
-        self.controller.relogin()
-        if self.controller.user is None:
-          page = LoginPage(self)
-          
-    self.display(page)
+      action.open()
+      self.screen.display(lambda x: AttendPage(x, action))
+    except AttendError as e:
+      self.screen.display(lambda x: ResultPage(x, e.massgae))
 
-class UnipaPage(tk.Frame):
-  def __init__(self, unipa:AttendUnipa):
-    super().__init__(unipa)
-    self.unipa:AttendUnipa = unipa
-
-class LoginPage(UnipaPage):
-  def __init__(self, unipa):
-    super().__init__(unipa)
+class LoginPage(Page):
+  def __init__(self, screen) -> None:
+    super().__init__(screen)
     
     self.title = tk.Label(self, text="ログインフォーム")
     self.title.grid(column=0, row=0, columnspan=2, padx=5, pady=5)
@@ -120,23 +112,14 @@ class LoginPage(UnipaPage):
     self.on_login()
   def on_login(self):
     try:
-      self.unipa.login(self.id_input.get(), self.paswrd_input.get())
-    except Exception:
+      AttendApp.of(self).login(self.id_input.get(), self.paswrd_input.get())
+    except LoginError:
       self.error_massage.grid()
 
-class Home(UnipaPage):
-  def __new__(cls, unipa):
-    try:
-      attend_form = unipa.get_attend_form()
-      return AttendPage(unipa, attend_form)
-    except Exception as e:
-      return ResultPage(unipa, e.args[0])
-
-class AttendPage(UnipaPage):
-  def __init__(self, unipa, attend_form):
-    super().__init__(unipa)
-    self.unipa = unipa
-    self.attend_form = attend_form
+class AttendPage(Page):
+  def __init__(self, screen, action:AttendAction):
+    super().__init__(screen)
+    self.action = action
 
     self.title = tk.Label(self, text="出席コード入力")
     self.title.grid(column=0, row=0, padx=5, pady=5)
@@ -149,12 +132,13 @@ class AttendPage(UnipaPage):
     self.send_button = tk.Button(self, text="送信", command=self.send)
     self.send_button.grid(column=0, row=2, padx=5, pady=5)
   def send(self):
-    self.unipa.attend(self.attend_form, self.code_input.get())
+    self.action.execution(self.code_input.get())
+    self.action.close()
+    Screen.of(self).display(lambda x: ResultPage(x, "出席成功"))
 
-class ResultPage(UnipaPage):
-  def __init__(self, unipa, massage):
-    super().__init__(unipa)
-    self.unipa = unipa
+class ResultPage(Page):
+  def __init__(self, screen, massage):
+    super().__init__(screen)
     
     self.result_label = tk.Label(self, text=massage)
     self.result_label.grid(column=0, row=0, columnspan=2, padx=5, pady=5)
@@ -173,9 +157,8 @@ class ResultPage(UnipaPage):
       self.close_button.focus_set()
 
   def close(self):
-    self.unipa.destroy()
+    App.of(self).destroy()
   def retry(self):
-    self.unipa.display(Home(self.unipa))
+    AttendApp.of(self).go_attend_page()
 
-if __name__ == "__main__":
-  AttendUnipa().mainloop()
+AttendApp().mainloop()
