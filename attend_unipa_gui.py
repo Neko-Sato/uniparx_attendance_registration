@@ -1,7 +1,6 @@
 from typing import Optional
 import tkinter as tk
 from page_app import App, Screen, Page
-from page_app.page import LabelPage
 from unipa_actions.attend_action import AttendError
 from unipa_mobail import UnipaMobail, LoginError, MaintenanceError
 from unipa_actions import AttendAction
