@@ -1,4 +1,5 @@
 from __future__ import annotations
+from calendar import c
 from typing import TYPE_CHECKING, Optional
 import requests
 from urllib.parse import urlencode
@@ -34,7 +35,7 @@ class UnipaMobail:
       loginForm.args[0],
       loginForm.args[1],
     )
-    self.update_soup(**values)
+    self.update_soup(**values, certification=False)
     if self.get_form("pmPage:loginForm") is not None:
       raise LoginError()
   def update_soup(self, path, data=[], certification=True, **kwargs):
