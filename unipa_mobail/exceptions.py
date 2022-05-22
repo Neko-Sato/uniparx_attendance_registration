@@ -1,18 +1,22 @@
 class FormNotFound(Exception):
   pass
 
-class UnipaError(Exception):
+class ActionError(Exception):
   pass
+
+class UnipaError(Exception):
+  def __init__(self, massgae):
+    self.massgae = massgae
 
 class LoginError(UnipaError):
-  pass
+  def __init__(self):
+    super().__init__("ログインエラー")
 
 class MaintenanceError(UnipaError):
-  pass
+  def __init__(self):
+    super().__init__("メンテナンス中です")
 
 class TimeoutError(UnipaError):
-  pass
-
-class ActionError(UnipaError):
-  pass
+  def __init__(self):
+    super().__init__("タイムアウト")
 

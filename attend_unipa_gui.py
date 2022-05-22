@@ -1,9 +1,8 @@
 from typing import Optional
 import tkinter as tk
 from page_app import App, Screen, Page
-from unipa_actions.attend_action import AttendError
 from unipa_mobail import UnipaMobail, LoginError, MaintenanceError
-from unipa_actions import AttendAction
+from unipa_actions import AttendAction, AttendError
 import configparser
 import os
 
@@ -36,8 +35,8 @@ class UnipaAppController:
     self.config.set('Certification', "paswrd", "")
     self.set_config()
   def set_config(self):
-      with open(self.config_path, 'w') as config_file:
-        self.config.write(config_file)
+    with open(self.config_path, 'w') as config_file:
+      self.config.write(config_file)
 
 class AttendApp(App):
   def __init__(self) -> None:
@@ -46,34 +45,17 @@ class AttendApp(App):
     self.title("うにぱしゅっせき")
     self.resizable(width=False, height=False)
     self.logout_button = tk.Button(self, text="ログアウト", command=self.logout)
-    try:
-      self.controller.relogin()
-    except MaintenanceError:
-      self.screen.display(lambda x: ResultPage(x, "メンテナンス中です"))
-    else:
-      if self.controller.user is not None:
-        self.logout_button.pack()
-        self.go_attend_page()
-      else:
-        self.screen.display(lambda x: LoginPage(x))
   @classmethod
   def of(cls, widget: tk.Widget) -> Optional["AttendApp"]:
     return super().of(widget)
   def login(self, user_id, user_paswrd):
     self.controller.login(user_id, user_paswrd)
     self.logout_button.pack()
-    self.go_attend_page()
+    ... #しゅっせき画面へ
   def logout(self):
     self.controller.logout()
-    self.logout_button.forget()
-    self.screen.display(lambda x: LoginPage(x))
-  def go_attend_page(self):
-    action = AttendAction(self.controller.user)
-    try:
-      action.open()
-      self.screen.display(lambda x: AttendPage(x, action))
-    except AttendError as e:
-      self.screen.display(lambda x: ResultPage(x, e.massgae))
+    self.logout_button.destroy()
+    ... #ログイン画面へ  
 
 class LoginPage(Page):
   def __init__(self, screen) -> None:
@@ -114,6 +96,17 @@ class LoginPage(Page):
       AttendApp.of(self).login(self.id_input.get(), self.paswrd_input.get())
     except LoginError:
       self.error_massage.grid()
+
+class HomePage:
+  def __new__(cls, screen):
+    user = AttendApp.of(screen).controller.user
+    action = AttendAction(user)
+    try:
+      action.open()
+    except AttendError as e:
+      return ResultPage(screen, e.massgae)
+    else:
+      return AttendPage(screen, action)
 
 class AttendPage(Page):
   def __init__(self, screen, action:AttendAction):

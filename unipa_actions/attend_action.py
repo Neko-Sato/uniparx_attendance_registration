@@ -28,5 +28,4 @@ class AttendAction(Action):
       raise AttendError("出席失敗")
 
 class AttendError(UnipaError):
-  def __init__(self, massgae):
-    self.massgae = massgae
+  pass

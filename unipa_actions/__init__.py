@@ -1,2 +1,2 @@
-from .attend_action import AttendAction
-from .get_assignments_action import GetAssignmentsAction
+from .attend_action import *
+from .get_assignments_action import *
